@@ -108,7 +108,7 @@ public final class AutomationCategories {
         // ── System / apps / notification ──
         put(SYSTEM, "notification", "showToast", "showDialog", "openApp", "openAppSplit",
                 "openAppsSplit", "shell", "radio",
-                "mqttPublish", "mqttTrigger",
+                "mqttPublish", "mqttTrigger", "webhook",
                 "wifiState", "wifiSsid", "btState", "btDeviceName", "locationZone",
                 "boot", "power", "time", "day", "dayOfMonth", "month", "sunPhase",
                 "uiNav", "screenshot", "iviReboot", "moveAppToDisplay", "stopClusterCast");
