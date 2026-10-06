@@ -101,7 +101,7 @@ public final class AutomationCategories {
                 "acChargeCurrentLimit");
         // ── Media / audio ──
         put(MEDIA, "mediaVolume", "channelVolume", "volumeStep", "mediaControl",
-                "playAudio", "playVideo", "stopAudio", "speak");
+                "playAudio", "playVideo", "stopAudio", "speak", "mediaPlaying");
         // ── Displays ──
         put(DISPLAYS, "screenBrightness", "clusterBrightness", "hudBrightness",
                 "hudPower", "screenPower");

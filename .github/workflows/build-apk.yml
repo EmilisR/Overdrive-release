@@ -2,7 +2,7 @@ name: Build debug APK
 
 on:
   push:
-    branches: [feature/webhook-action]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
