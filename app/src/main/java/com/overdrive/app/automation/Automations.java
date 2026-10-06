@@ -1839,6 +1839,15 @@ public class Automations {
                     return true;
                 }
                 return false;
+            case "mediaPlaying":
+                // Media playback edge, relayed from the app-process MediaPlaybackStateMonitor
+                // (AudioManager.isMusicActive needs a real app context). Only the two real
+                // states; forceStore so the map is seeded before the first rule is enabled.
+                if ("on".equals(value) || "off".equals(value)) {
+                    update(com.overdrive.app.automation.condition.BydEvent.MEDIA_PLAYING, value, true);
+                    return true;
+                }
+                return false;
             case "btDeviceName":
                 // Connected-device friendly name from the same relay ("" when nothing is
                 // connected). Free-text (bounded) — a name can be any string, so the only

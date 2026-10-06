@@ -320,6 +320,11 @@ public class Conditions {
                 new Label("btState", "automation.bt_state"),
                 "automation.bt_state_description",
                 new EnumType(new Label("state", "automation.state"), new Label("on", "automation.connected"), new Label("off", "automation.disconnected"))));
+        // Whether media is playing right now (relayed from the app process, like btState).
+        addCondition(new EventCondition(
+                new Label("mediaPlaying", "automation.media_playing"),
+                "automation.media_playing_description",
+                new EnumType(new Label("state", "automation.state"), new Label("on", "automation.playing"), new Label("off", "automation.not_playing"))));
         addCondition(new EventCondition(
                 new Label("btDeviceName", "automation.bt_device_name"),
                 "automation.bt_device_name_description",
