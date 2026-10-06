@@ -1357,6 +1357,10 @@ public class Actions {
         addAction(new MqttPublishAction(
                 new Label("mqttPublish", "automation.mqtt_publish"),
                 "automation.mqtt_publish_description"));
+        // Send an HTTP webhook (GET/POST) to any URL — Home Assistant, IFTTT, ntfy, etc.
+        addAction(new WebhookAction(
+                new Label("webhook", "automation.webhook"),
+                "automation.webhook_description"));
 
         // Shell command — the free-text StringType variable is defined inside
         // ShellAction. Autonomous exec, so it self-gates on the dedicated
