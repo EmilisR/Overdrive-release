@@ -88,6 +88,12 @@ public class KeepAliveAccessibilityService extends AccessibilityService {
             Log.w(TAG, "BluetoothStateMonitor start failed: " + t.getMessage());
         }
 
+        try {
+            MediaPlaybackStateMonitor.start(getApplicationContext());
+        } catch (Throwable t) {
+            Log.w(TAG, "MediaPlaybackStateMonitor start failed: " + t.getMessage());
+        }
+
         // Config must match the WORKING shape proven on DiLink firmware (verified
         // against a known-good OEM app): a service that subscribes to ZERO event
         // types (eventTypes=0) is treated as inert by this firmware's

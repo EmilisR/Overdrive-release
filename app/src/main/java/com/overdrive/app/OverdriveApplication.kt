@@ -98,6 +98,11 @@ class OverdriveApplication : Application() {
         } catch (ignored: Throwable) {
             // Guard only: the a11y hook calls start() again if it ever binds.
         }
+        try {
+            com.overdrive.app.services.MediaPlaybackStateMonitor.start(this)
+        } catch (ignored: Throwable) {
+            // Guard only: the a11y hook calls start() again if it ever binds.
+        }
     }
 
     /**
