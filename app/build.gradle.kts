@@ -412,6 +412,10 @@ android {
         debug {
             isMinifyEnabled = false
 
+            // Installs side by side with the original (com.overdrive.app) for testing.
+            applicationIdSuffix = ".webhook"
+            versionNameSuffix = "-webhook"
+
             // Debug builds match the active braveheart channel
             buildConfigField("String", "UPDATE_CHANNEL", "\"braveheart\"")
         }
