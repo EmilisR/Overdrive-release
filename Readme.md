@@ -153,12 +153,52 @@ Open OverDrive → **MQTT** (sidebar or app drawer) → **Add Connection**, then
 | Field | What to enter |
 |---|---|
 | **Connection Name** | Anything, e.g. `Home Assistant` |
-| **Broker URL** | Your broker's host, e.g. `192.168.1.10` (or `mqtts://...` for TLS) |
-| **Port** | `1883` (plain) or `8883` (TLS) |
+| **Broker URL** | Your broker's host, e.g. `192.168.1.10`. For TLS or WebSocket, add a protocol prefix — see [Broker URL formats](#broker-url-formats) |
+| **Port** | `1883` (plain) or `8883` (TLS). Ignored if the Broker URL already contains a port |
 | **Username / Password** | Only if your broker requires login (leave blank otherwise) |
 | **Topic** | Leave the default `overdrive/vehicle/telemetry` unless you have a reason to change it |
 
 > **Self-signed / Mosquitto TLS certificate?** Enable the **trust self-signed certificates** option on the connection so OverDrive accepts your broker's cert.
+
+#### Broker URL formats
+
+The protocol comes from the prefix on the **Broker URL**. Without a prefix, OverDrive always connects with plain, unencrypted MQTT (`tcp://`), even on port `8883`.
+
+| Protocol | Prefix | Typical port |
+|---|---|---|
+| Plain MQTT | none, or `tcp://` | `1883` |
+| MQTT over TLS | `ssl://` | `8883` |
+| MQTT over WebSocket | `ws://` | depends on broker |
+| MQTT over secure WebSocket | `wss://` | `443` or `8884` |
+
+Only these four prefixes work. `mqtt://`, `mqtts://`, `http://` and `https://` aren't recognised.
+
+How the Broker URL and **Port** field combine:
+
+| Broker URL | Port field | Connects to |
+|---|---|---|
+| `192.168.1.10` | `1883` | `tcp://192.168.1.10:1883` |
+| `ssl://broker.example.com` | `8883` | `ssl://broker.example.com:8883` |
+| `ssl://broker.example.com:8883` | anything | `ssl://broker.example.com:8883` (Port field ignored) |
+| `wss://broker.example.com:8884/mqtt` | anything | `wss://broker.example.com:8884/mqtt` (Port field ignored) |
+
+Rules:
+
+- **To use a TLS port, add `ssl://` or `wss://`.** A bare host with port `8883` connects as `tcp://host:8883`, sending plain MQTT to a TLS port. The broker drops it, and the connection fails with `reason=32109` / `EOFException`.
+- **A port in a bare host doesn't work.** `broker.example.com:8883` becomes `tcp://broker.example.com:8883:1883`. Put the port in the Port field, or add a prefix and keep the port in the URL.
+- **A WebSocket path needs the port in the URL.** Write `wss://host:8884/mqtt`. Without the port, `wss://host/mqtt` gets the Port field appended after the path (`wss://host/mqtt:8884`), which is invalid.
+- **A trailing slash is removed**, so `ssl://broker.example.com/` works the same as `ssl://broker.example.com`.
+
+Examples:
+
+| Broker | Broker URL | Port |
+|---|---|---|
+| Home Assistant Mosquitto, plain | `192.168.1.10` | `1883` |
+| Home Assistant Mosquitto, TLS (turn on *trust self-signed certificates*) | `ssl://192.168.1.10` | `8883` |
+| HiveMQ Cloud, TLS | `ssl://<cluster-id>.s1.eu.hivemq.cloud:8883` | (ignored) |
+| HiveMQ Cloud, secure WebSocket | `wss://<cluster-id>.s1.eu.hivemq.cloud:8884/mqtt` | (ignored) |
+
+For HiveMQ Cloud, use the credentials from the cluster's **Access Management** page, not your HiveMQ console login, and leave *trust self-signed certificates* off.
 
 ### Step 2 — Turn on Home Assistant discovery
 
@@ -230,6 +270,7 @@ Full list of controllable entities and their accepted payloads:
 - **Sensors show but controls are missing?** "Allow vehicle control" isn't enabled — see Step 3 (it only appears after discovery is on).
 - **A command does nothing?** The car must be awake/accessible to the head-unit SDK for that action. OverDrive optimistically updates the entity, then the next telemetry refresh reconciles the true state.
 - **Broker on a different network?** Enable the [Tailscale proxy](#tailscale-proxy) so the car can reach it without port forwarding.
+- **`Connect failed (reason=32109)` with `EOFException`?** The broker closed the connection before answering. This usually means plain MQTT is going to a TLS port. Add `ssl://` (or `wss://`) to the Broker URL — see [Broker URL formats](#broker-url-formats).
 
 ## Tech Specs
 
