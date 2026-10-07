@@ -43,6 +43,33 @@ public class MediaPlayingSignalTest {
         assertTrue(isPlaying(stale + PAUSED.replace("state=2", "state=3")));
     }
 
+    @Test
+    public void appSelectionMatchesOnlyThatAppsPackage() throws Exception {
+        String rvxPlaying = PAUSED.replace("com.google.android.apps.youtube.music", "app.rvx.android.apps.youtube.music")
+                .replace("state=2", "state=3");
+        String spotifyPaused = "    x\n      package=com.spotify.music\n      active=true\n"
+                + "      state=PlaybackState {state=2, position=0}\n";
+        String dump = rvxPlaying + spotifyPaused;
+        assertTrue(appPlaying(dump, "youtubeMusic"));   // RVX build matches
+        assertTrue(appPlaying(dump, "any"));
+        assertFalse(appPlaying(dump, "spotify"));       // spotify is paused
+        assertFalse(appPlaying(spotifyPaused + PAUSED, "youtubeMusic"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static boolean appPlaying(String dump, String app) throws Exception {
+        Class<?> c = Class.forName("com.overdrive.app.automation.condition.MediaEvent");
+        java.lang.reflect.Method pp = c.getDeclaredMethod("playingPackages", String.class);
+        pp.setAccessible(true);
+        java.util.Set<String> playing = (java.util.Set<String>) pp.invoke(null, dump);
+        java.lang.reflect.Field f = c.getDeclaredField("APPS");
+        f.setAccessible(true);
+        String[] needles = ((java.util.Map<String, String[]>) f.get(null)).get(app);
+        java.lang.reflect.Method ap = c.getDeclaredMethod("appPlaying", java.util.Set.class, String[].class);
+        ap.setAccessible(true);
+        return (Boolean) ap.invoke(null, playing, needles);
+    }
+
     private static boolean isPlaying(String dump) throws Exception {
         java.lang.reflect.Method m = Class.forName("com.overdrive.app.automation.condition.MediaEvent")
                 .getDeclaredMethod("isAnySessionPlaying", String.class);

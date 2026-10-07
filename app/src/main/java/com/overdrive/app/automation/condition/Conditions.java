@@ -318,7 +318,19 @@ public class Conditions {
         addCondition(new EventCondition(
                 new Label("mediaPlaying", "automation.media_playing"),
                 "automation.media_playing_description",
-                new EnumType(new Label("state", "automation.state"), new Label("on", "automation.playing"), new Label("off", "automation.not_playing"))));
+                new EnumType(new Label("state", "automation.state"), new Label("on", "automation.playing"), new Label("off", "automation.not_playing")),
+                // Which app must be the one playing. Option ids MUST match MediaEvent.APPS.
+                new EnumType(new Label("app", "automation.media_app"),
+                        new Label("any", "automation.media_app_any"),
+                        new Label("youtubeMusic", "automation.media_app_youtubeMusic"),
+                        new Label("spotify", "automation.media_app_spotify"),
+                        new Label("appleMusic", "automation.media_app_appleMusic"),
+                        new Label("amazonMusic", "automation.media_app_amazonMusic"),
+                        new Label("deezer", "automation.media_app_deezer"),
+                        new Label("tidal", "automation.media_app_tidal"),
+                        new Label("soundcloud", "automation.media_app_soundcloud"),
+                        new Label("vlc", "automation.media_app_vlc"),
+                        new Label("poweramp", "automation.media_app_poweramp"))));
         addCondition(new EventCondition(
                 new Label("btDeviceName", "automation.bt_device_name"),
                 "automation.bt_device_name_description",
