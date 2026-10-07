@@ -412,9 +412,11 @@ android {
         debug {
             isMinifyEnabled = false
 
-            // Installs side by side with the original (com.overdrive.app) for testing.
-            applicationIdSuffix = ".webhook"
-            versionNameSuffix = "-webhook"
+            // Keep the release applicationId: the daemon launchers locate the APK with
+            // `pm path com.overdrive.app` (and other code hardcodes that package), so a
+            // suffixed id leaves the daemon running stale code. Uninstall the release app
+            // first (different signing key).
+            versionNameSuffix = "-debug"
 
             // Debug builds match the active braveheart channel
             buildConfigField("String", "UPDATE_CHANNEL", "\"braveheart\"")
