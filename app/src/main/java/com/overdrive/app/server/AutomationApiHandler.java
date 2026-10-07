@@ -357,6 +357,7 @@ public final class AutomationApiHandler {
             com.overdrive.app.automation.condition.DoorEvent.seedForEditor();
             com.overdrive.app.automation.condition.TimeEvent.seedForEditor();
             com.overdrive.app.automation.condition.NetworkEvent.seedForEditor();
+            com.overdrive.app.automation.condition.MediaEvent.seedForEditor();
         } catch (Throwable t) {
             // Best-effort: fall back to whatever the state map already holds.
             logger.warn("state seed publish failed: " + t.getMessage());

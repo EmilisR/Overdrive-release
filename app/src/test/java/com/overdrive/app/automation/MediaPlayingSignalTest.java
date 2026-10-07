@@ -115,6 +115,18 @@ public class MediaPlayingSignalTest {
         assertFalse(appPlaying(dump, "spotify"));
     }
 
+    @Test
+    public void sessionPackagesListsEverySessionRegardlessOfState() throws Exception {
+        java.lang.reflect.Method m = Class.forName("com.overdrive.app.automation.condition.MediaEvent")
+                .getDeclaredMethod("sessionPackages", String.class);
+        m.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        java.util.Set<String> pkgs = (java.util.Set<String>) m.invoke(null,
+                PAUSED + "      package=com.spotify.music\n      active=false\n");
+        assertTrue(pkgs.contains("com.google.android.apps.youtube.music"));
+        assertTrue(pkgs.contains("com.spotify.music"));
+    }
+
     @SuppressWarnings("unchecked")
     private static boolean appPlaying(String dump, String app) throws Exception {
         Class<?> c = Class.forName("com.overdrive.app.automation.condition.MediaEvent");

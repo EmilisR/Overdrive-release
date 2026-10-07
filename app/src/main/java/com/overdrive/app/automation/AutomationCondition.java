@@ -180,6 +180,12 @@ public class AutomationCondition {
      */
     public static boolean evaluate(EventData lhs, String comparator, Object value) {
         if (lhs == null || comparator == null) return false;
+        // Signals with an on-demand source are refreshed at the moment a flow action reads them
+        // (see MediaEvent.sampleNow), so a Loop / Wait Until never compares a stale or unseeded
+        // value just because its background poller has not caught up.
+        if (com.overdrive.app.automation.condition.BydEvent.MEDIA_PLAYING.getType().equals(lhs.getType())) {
+            com.overdrive.app.automation.condition.MediaEvent.sampleNow(lhs);
+        }
         Value current = Automations.getStateValue(lhs);
         if (current == null) return false;
         return new AutomationCondition(lhs, comparator, value).compare(current);

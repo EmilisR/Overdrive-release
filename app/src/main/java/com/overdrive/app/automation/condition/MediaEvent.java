@@ -74,25 +74,103 @@ public final class MediaEvent {
 
     private static volatile String lastPublished;
 
+    private static final long MIN_SAMPLE_GAP_MS = 500L;
+    private static Set<String> lastPlaying = new HashSet<>();
+    private static Set<String> lastSessionPackages = new HashSet<>();
+    private static long lastSampleMs = 0L;
+    private static boolean haveSample = false;
+
     private static void poll() {
-        String dump = dumpMediaSessions();
-        if (dump == null) return;
-        Set<String> playing = playingPackages(dump);
-        String value = playing.isEmpty() ? "off" : "on";
-        // Log only on change so the daemon log shows what this poller saw, without 2s spam.
-        String sig = value + playing;
-        if (!sig.equals(lastPublished)) {
-            logger.info("mediaPlaying -> " + value + " playing=" + playing + " (" + summarize(dump) + ")");
-            lastPublished = sig;
+        sampleAndPublish(null, false);
+    }
+
+    /**
+     * Read the media sessions (at most once per {@link #MIN_SAMPLE_GAP_MS}) and publish the result.
+     * Shared by the 2s poller and by {@link #sampleNow}, so a flow action that reads the signal
+     * never depends on the poller's scheduling having caught up.
+     *
+     * @param extra     an additional key to publish (a rule's own address), or null
+     * @param allApps   also publish every app that currently has a session (editor hints)
+     */
+    private static synchronized void sampleAndPublish(EventData extra, boolean allApps) {
+        long now = System.currentTimeMillis();
+        if (!haveSample || now - lastSampleMs >= MIN_SAMPLE_GAP_MS) {
+            String dump = dumpMediaSessions();
+            if (dump != null) {
+                lastPlaying = playingPackages(dump);
+                lastSessionPackages = sessionPackages(dump);
+                haveSample = true;
+                lastSampleMs = now;
+                String value = lastPlaying.isEmpty() ? "off" : "on";
+                // Log only on change so the daemon log shows what this poller saw, without 2s spam.
+                String sig = value + lastPlaying;
+                if (!sig.equals(lastPublished)) {
+                    logger.info("mediaPlaying -> " + value + " playing=" + lastPlaying
+                            + " (" + summarize(dump) + ")");
+                    lastPublished = sig;
+                }
+            }
         }
+        if (!haveSample) return;
+        Set<String> playing = lastPlaying;
         // Bare key = any app (what a saved address without an app attribute resolves to).
-        Automations.update(BydEvent.MEDIA_PLAYING, value);
+        Automations.update(BydEvent.MEDIA_PLAYING, playing.isEmpty() ? "off" : "on");
         // One key per app instance that rules actually use (mediaPlaying:app=<package|any>),
         // published every cycle so an app with no session yet reads "off", not null.
         for (EventData e : Automations.referencedEventsOfType(BydEvent.MEDIA_PLAYING.getType())) {
-            String app = e.getVariables().get("app");
-            Automations.update(e, appPlaying(playing, app) ? "on" : "off");
+            publishApp(e, playing);
         }
+        if (extra != null && BydEvent.MEDIA_PLAYING.getType().equals(extra.getType())) {
+            publishApp(extra, playing);
+        }
+        if (allApps) {
+            for (String pkg : lastSessionPackages) {
+                publishApp(new EventData(BydEvent.MEDIA_PLAYING.getType(), Map.of("app", pkg)), playing);
+            }
+            publishApp(new EventData(BydEvent.MEDIA_PLAYING.getType(), Map.of("app", ANY)), playing);
+        }
+    }
+
+    private static void publishApp(EventData e, Set<String> playing) {
+        String app = e.getVariables().get("app");
+        Automations.update(e, appPlaying(playing, app) ? "on" : "off");
+    }
+
+    /**
+     * Refresh the signal right now for a flow action (Loop / Wait Until / If) that is about to read
+     * {@code key}. Makes those actions independent of the background poller: even if it has not
+     * started, been parked, or is up to 2s behind, the value they compare is current. Rate-limited,
+     * so a tight loop costs at most ~2 dumps/s.
+     */
+    public static void sampleNow(EventData key) {
+        try {
+            sampleAndPublish(key, false);
+        } catch (Throwable t) {
+            logger.warn("mediaPlaying sampleNow failed: " + t.getMessage());
+        }
+    }
+
+    /**
+     * Publish live values for the editor's "reads X right now" hint, including every app that has a
+     * media session, even while no rule references the signal yet (the poller is parked then).
+     */
+    public static void seedForEditor() {
+        try {
+            sampleAndPublish(null, true);
+        } catch (Throwable t) {
+            logger.warn("mediaPlaying seedForEditor failed: " + t.getMessage());
+        }
+    }
+
+    /** All packages that have a media session (any state). Pure; unit-tested. */
+    static Set<String> sessionPackages(String dump) {
+        Set<String> out = new HashSet<>();
+        if (dump == null) return out;
+        for (String line : dump.split("\n")) {
+            String t = line.trim();
+            if (t.startsWith("package=")) out.add(t.substring(8).trim());
+        }
+        return out;
     }
 
     /**
