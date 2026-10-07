@@ -4,41 +4,49 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
-import com.overdrive.app.automation.condition.BydEvent;
 import com.overdrive.app.automation.condition.Conditions;
 
-import org.junit.BeforeClass;
 import org.junit.Test;
 
-/** The relayed {@code mediaPlaying} signal: accepts only on/off, is stored, and is registered. */
+/** The {@code mediaPlaying} signal: registered, and derived from dumpsys media_session output. */
 public class MediaPlayingSignalTest {
 
-    @BeforeClass
-    public static void muteAndroidLog() {
-        com.overdrive.app.logging.DaemonLogger.Config cfg =
-                new com.overdrive.app.logging.DaemonLogger.Config();
-        cfg.enableConsoleLog = false;
-        cfg.enableFileLog = false;
-        cfg.enableStdoutLog = true;
-        com.overdrive.app.logging.DaemonLogger.configure(cfg);
-    }
-
-    @Test
-    public void publishAcceptsOnOffAndStoresEvenWhileDisabled() {
-        assertTrue(Automations.publishExternalEvent("mediaPlaying", "off"));
-        assertNotNull("forceStore must seed the state map", Automations.getStateValue(BydEvent.MEDIA_PLAYING));
-        assertTrue(Automations.publishExternalEvent("mediaPlaying", "on"));
-    }
-
-    @Test
-    public void publishRejectsGarbage() {
-        assertFalse(Automations.publishExternalEvent("mediaPlaying", "paused"));
-        assertFalse(Automations.publishExternalEvent("mediaPlaying", null));
-        assertFalse(Automations.publishExternalEvent("mediaPlaying", ""));
-    }
+    private static final String PAUSED =
+            "Sessions Stack - have 1 sessions:\n"
+          + "    com.google.android.apps.youtube.music/YouTube Music media session (userId=0)\n"
+          + "      package=com.google.android.apps.youtube.music\n"
+          + "      active=true\n"
+          + "      state=PlaybackState {state=2, position=0, buffered position=0, speed=1.0}\n";
 
     @Test
     public void conditionIsRegistered() {
         assertNotNull(new Conditions().getCondition("mediaPlaying"));
+    }
+
+    @Test
+    public void playingSessionReadsOn() throws Exception {
+        assertTrue(isPlaying(PAUSED.replace("state=2", "state=3")));
+    }
+
+    @Test
+    public void pausedBufferingOrEmptyReadOff() throws Exception {
+        assertFalse(isPlaying(PAUSED));
+        assertFalse(isPlaying(PAUSED.replace("state=2", "state=6")));
+        assertFalse(isPlaying("Sessions Stack - have 0 sessions:\n"));
+        assertFalse(isPlaying(null));
+    }
+
+    @Test
+    public void inactiveSessionIsIgnoredAndLaterSessionStillCounts() throws Exception {
+        String stale = PAUSED.replace("state=2", "state=3").replace("active=true", "active=false");
+        assertFalse(isPlaying(stale));
+        assertTrue(isPlaying(stale + PAUSED.replace("state=2", "state=3")));
+    }
+
+    private static boolean isPlaying(String dump) throws Exception {
+        java.lang.reflect.Method m = Class.forName("com.overdrive.app.automation.condition.MediaEvent")
+                .getDeclaredMethod("isAnySessionPlaying", String.class);
+        m.setAccessible(true);
+        return (Boolean) m.invoke(null, dump);
     }
 }

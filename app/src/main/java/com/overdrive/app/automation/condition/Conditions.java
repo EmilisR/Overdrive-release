@@ -314,7 +314,7 @@ public class Conditions {
                 new Label("btState", "automation.bt_state"),
                 "automation.bt_state_description",
                 new EnumType(new Label("state", "automation.state"), new Label("on", "automation.connected"), new Label("off", "automation.disconnected"))));
-        // Whether media is playing right now (relayed from the app process, like btState).
+        // Whether media is playing right now (daemon-polled from the media session, see MediaEvent).
         addCondition(new EventCondition(
                 new Label("mediaPlaying", "automation.media_playing"),
                 "automation.media_playing_description",

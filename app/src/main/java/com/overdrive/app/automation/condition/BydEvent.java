@@ -85,8 +85,8 @@ public class BydEvent {
     // has no telephony access). Enables "mute media when a call comes in" etc. Published
     // via Automations.publishExternalEvent from CallStateMonitor.
     public static final EventData CALL_STATE = new EventData("callState");
-    // Whether any app is currently playing media (on/off), relayed from the app process by
-    // MediaPlaybackStateMonitor (the daemon has no AudioManager/app context). Lets a Loop
+    // Whether any app is currently playing media (on/off), polled by MediaEvent from the
+    // media-session state (`dumpsys media_session`). Lets a Loop
     // "until mediaPlaying = on" retry a Play key until playback actually starts.
     public static final EventData MEDIA_PLAYING = new EventData("mediaPlaying");
     // The same "speed" event is stored twice under different units so a condition can

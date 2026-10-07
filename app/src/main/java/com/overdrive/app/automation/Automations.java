@@ -137,6 +137,8 @@ public class Automations {
         runIsolatedStartupStep("time poller", () -> TimeEvent.refresh());
         runIsolatedStartupStep("network poller",
                 () -> com.overdrive.app.automation.condition.NetworkEvent.refresh());
+        runIsolatedStartupStep("media poller",
+                () -> com.overdrive.app.automation.condition.MediaEvent.refresh());
         runIsolatedStartupStep("turn-signal poller",
                 () -> com.overdrive.app.automation.condition.TurnSignalEvent.refresh());
         runIsolatedStartupStep("drive-mode poller",
@@ -1818,15 +1820,6 @@ public class Automations {
                 // and survives a daemon-only restart (the relay won't re-send otherwise).
                 if ("on".equals(value) || "off".equals(value)) {
                     update(com.overdrive.app.automation.condition.BydEvent.BT_STATE, value, true);
-                    return true;
-                }
-                return false;
-            case "mediaPlaying":
-                // Media playback edge, relayed from the app-process MediaPlaybackStateMonitor
-                // (AudioManager.isMusicActive needs a real app context). Only the two real
-                // states; forceStore so the map is seeded before the first rule is enabled.
-                if ("on".equals(value) || "off".equals(value)) {
-                    update(com.overdrive.app.automation.condition.BydEvent.MEDIA_PLAYING, value, true);
                     return true;
                 }
                 return false;
