@@ -47,10 +47,37 @@ public final class MediaEvent {
         poller.refresh();
     }
 
+    private static volatile String lastPublished;
+
     private static void poll() {
         String dump = dumpMediaSessions();
         if (dump == null) return;
-        Automations.update(BydEvent.MEDIA_PLAYING, isAnySessionPlaying(dump) ? "on" : "off");
+        String value = isAnySessionPlaying(dump) ? "on" : "off";
+        // Log only on change so the daemon log shows what this poller saw, without 2s spam.
+        if (!value.equals(lastPublished)) {
+            logger.info("mediaPlaying -> " + value + " (" + summarize(dump) + ")");
+            lastPublished = value;
+        }
+        Automations.update(BydEvent.MEDIA_PLAYING, value);
+    }
+
+    /** "pkg:state,pkg:state" for each session, for the change log line. */
+    static String summarize(String dump) {
+        StringBuilder sb = new StringBuilder();
+        String pkg = "?";
+        for (String line : dump.split("\n")) {
+            String t = line.trim();
+            if (t.startsWith("package=")) {
+                pkg = t.substring(8);
+            } else {
+                Matcher m = STATE.matcher(t);
+                if (m.find()) {
+                    if (sb.length() > 0) sb.append(", ");
+                    sb.append(pkg).append(':').append(m.group(1));
+                }
+            }
+        }
+        return sb.length() == 0 ? "no sessions" : sb.toString();
     }
 
     /** True if any ACTIVE media session reports PlaybackState STATE_PLAYING. Pure; unit-tested. */
@@ -75,7 +102,8 @@ public final class MediaEvent {
     private static String dumpMediaSessions() {
         Process p = null;
         try {
-            p = new ProcessBuilder("dumpsys", "media_session").redirectErrorStream(true).start();
+            // Via sh like the other daemon shell calls, so PATH/dumpsys resolution matches them.
+            p = new ProcessBuilder("sh", "-c", "dumpsys media_session").redirectErrorStream(true).start();
             final InputStream in = p.getInputStream();
             CompletableFuture<String> out = CompletableFuture.supplyAsync(() -> {
                 try {
