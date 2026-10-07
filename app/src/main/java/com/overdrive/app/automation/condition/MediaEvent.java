@@ -33,22 +33,24 @@ public final class MediaEvent {
     /** android.media.session.PlaybackState.STATE_PLAYING */
     private static final int STATE_PLAYING = 3;
 
+    /** Attribute value meaning "any app" (what the bare, attribute-less signal also means). */
+    static final String ANY = "any";
+
     /**
-     * Selectable apps for the "app" attribute: option id -> substrings of the media-session package.
-     * "any" (null) matches every session. Ids MUST match the options in Conditions.
+     * Ids stored by an earlier build that offered a fixed app list (before the installed-app
+     * picker). Kept so those saved rules keep working: id -> substring of the package.
      */
-    static final Map<String, String[]> APPS = new LinkedHashMap<>();
+    private static final Map<String, String> LEGACY_IDS = new LinkedHashMap<>();
     static {
-        APPS.put("any", null);
-        APPS.put("youtubeMusic", new String[] {"youtube.music"}); // google, revanced, rvx builds
-        APPS.put("spotify", new String[] {"com.spotify."});
-        APPS.put("appleMusic", new String[] {"com.apple.android.music"});
-        APPS.put("amazonMusic", new String[] {"com.amazon.mp3"});
-        APPS.put("deezer", new String[] {"deezer.android"});
-        APPS.put("tidal", new String[] {"com.aspiro.tidal"});
-        APPS.put("soundcloud", new String[] {"com.soundcloud.android"});
-        APPS.put("vlc", new String[] {"org.videolan.vlc"});
-        APPS.put("poweramp", new String[] {"com.maxmpz.audioplayer"});
+        LEGACY_IDS.put("youtubeMusic", "youtube.music");
+        LEGACY_IDS.put("spotify", "com.spotify.");
+        LEGACY_IDS.put("appleMusic", "com.apple.android.music");
+        LEGACY_IDS.put("amazonMusic", "com.amazon.mp3");
+        LEGACY_IDS.put("deezer", "deezer.android");
+        LEGACY_IDS.put("tidal", "com.aspiro.tidal");
+        LEGACY_IDS.put("soundcloud", "com.soundcloud.android");
+        LEGACY_IDS.put("vlc", "org.videolan.vlc");
+        LEGACY_IDS.put("poweramp", "com.maxmpz.audioplayer");
     }
 
     private static final Pattern STATE = Pattern.compile("state=PlaybackState \\{state=(\\d+)");
@@ -61,17 +63,9 @@ public final class MediaEvent {
 
     private MediaEvent() {}
 
-    /** Key for one app option; "any" is the same signal as the bare (attribute-less) key. */
-    static EventData key(String app) {
-        return new EventData(BydEvent.MEDIA_PLAYING.getType(), Map.of("app", app));
-    }
-
     private static boolean referenced() {
-        if (Automations.isEventReferenced(BydEvent.MEDIA_PLAYING)) return true;
-        for (String app : APPS.keySet()) {
-            if (Automations.isEventReferenced(key(app))) return true;
-        }
-        return false;
+        return Automations.isEventReferenced(BydEvent.MEDIA_PLAYING)
+                || !Automations.referencedEventsOfType(BydEvent.MEDIA_PLAYING.getType()).isEmpty();
     }
 
     public static void refresh() {
@@ -93,28 +87,35 @@ public final class MediaEvent {
         }
         // Bare key = any app (what a saved address without an app attribute resolves to).
         Automations.update(BydEvent.MEDIA_PLAYING, value);
-        for (Map.Entry<String, String[]> app : APPS.entrySet()) {
-            Automations.update(key(app.getKey()), appPlaying(playing, app.getValue()) ? "on" : "off");
+        // One key per app instance that rules actually use (mediaPlaying:app=<package|any>),
+        // published every cycle so an app with no session yet reads "off", not null.
+        for (EventData e : Automations.referencedEventsOfType(BydEvent.MEDIA_PLAYING.getType())) {
+            String app = e.getVariables().get("app");
+            Automations.update(e, appPlaying(playing, app) ? "on" : "off");
         }
     }
 
-    /** True if a playing package matches any of the app's substrings (null = any app). */
-    static boolean appPlaying(Set<String> playingPackages, String[] needles) {
-        if (needles == null) return !playingPackages.isEmpty();
+    /**
+     * Whether {@code app} (an installed package, "any"/null for any app, or a legacy fixed-list
+     * id) is among the packages currently playing.
+     */
+    static boolean appPlaying(Set<String> playingPackages, String app) {
+        if (app == null || app.isEmpty() || ANY.equals(app)) return !playingPackages.isEmpty();
+        String legacy = LEGACY_IDS.get(app);
         for (String pkg : playingPackages) {
-            for (String n : needles) if (pkg.contains(n)) return true;
+            if (legacy != null ? pkg.contains(legacy) : pkg.equals(app)) return true;
         }
         return false;
     }
 
-    /** "pkg:state,pkg:state" for each session, for the change log line. */
+    /** "pkg:state, pkg:state" for each session, for the change log line. */
     static String summarize(String dump) {
         StringBuilder sb = new StringBuilder();
         String pkg = "?";
         for (String line : dump.split("\n")) {
             String t = line.trim();
             if (t.startsWith("package=")) {
-                pkg = t.substring(8);
+                pkg = t.substring(8).trim();
             } else {
                 Matcher m = STATE.matcher(t);
                 if (m.find()) {
@@ -167,7 +168,9 @@ public final class MediaEvent {
                 }
             });
             String s = out.get(DUMP_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-            return (s == null || s.isEmpty()) ? null : s;
+            // A genuine dump starts "MEDIA SESSION SERVICE"; anything else (shell error text,
+            // truncated output) must not be read as "nothing playing".
+            return (s == null || !s.contains("MEDIA SESSION")) ? null : s;
         } catch (Exception e) {
             logger.warn("dumpsys media_session failed: " + e.getMessage());
             return null;

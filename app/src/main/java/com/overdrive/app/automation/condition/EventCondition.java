@@ -1,6 +1,7 @@
 package com.overdrive.app.automation.condition;
 
 import com.overdrive.app.automation.AutomationCondition;
+import com.overdrive.app.automation.type.AppType;
 import com.overdrive.app.automation.type.EnumType;
 import com.overdrive.app.automation.type.Type;
 import com.overdrive.app.automation.value.Label;
@@ -19,7 +20,7 @@ public class EventCondition {
     private final Label label;
     private final String description;
     private final Type value;
-    private final List<EnumType> variables;
+    private final List<Type> variables;
 
     /**
      * A condition based on an event happening
@@ -32,7 +33,7 @@ public class EventCondition {
      * @param value       The type with constraints for the potential state values
      * @param variables   The variables that will also be set in the state. This allows extra options such as area for windows
      */
-    public EventCondition(Label label, String description, Type value, EnumType... variables) {
+    public EventCondition(Label label, String description, Type value, Type... variables) {
         this.label = label;
         this.description = description;
         this.value = value;
@@ -71,9 +72,9 @@ public class EventCondition {
     /**
      * The variables for this condition
      *
-     * @return These will be enums and need to match events passed in to Automations.update
+     * @return These are enums (or an installed-app picker) and need to match events passed in to Automations.update
      */
-    public List<EnumType> getVariables() {
+    public List<Type> getVariables() {
         return variables;
     }
 
@@ -119,8 +120,14 @@ public class EventCondition {
             String type = getLabel().getId();
             Map<String, String> variables = new HashMap<>();
             JSONObject variablesJson = input.optJSONObject("variables");
-            for (EnumType variable : getVariables()) {
+            for (Type variable : getVariables()) {
                 String key = variable.getLabel().getId();
+                // An installed-app attribute is OPTIONAL: an automation saved before it existed (or
+                // with no app chosen) has no value and means "any app", i.e. the bare signal key.
+                if (variable instanceof AppType
+                        && (variablesJson == null || !variablesJson.has(key))) {
+                    continue;
+                }
                 String value = variablesJson.getString(key);
                 if (variable.isValid(value)) {
                     variables.put(key, value);

@@ -742,6 +742,90 @@ public class Automations {
         return false;
     }
 
+    /** A memoized {@link #referencedEventsOfType} answer and the config generation it was computed under. */
+    private static final class TypeScan {
+        final int generation;
+        final java.util.Set<EventData> events;
+
+        TypeScan(int generation, java.util.Set<EventData> events) {
+            this.generation = generation;
+            this.events = events;
+        }
+    }
+
+    private static final Map<String, TypeScan> typeScanCache = new ConcurrentHashMap<>();
+
+    /**
+     * Every distinct signal key of {@code type} (including its attributes, e.g.
+     * {@code mediaPlaying:app=com.spotify.music}) that an enabled automation uses, in a trigger,
+     * a condition (or its dynamic right-hand side), or an action operand/embedded token.
+     *
+     * <p>For signals whose instances are open-ended (an installed-app attribute) a poller can't
+     * enumerate the keys from a fixed list, so it asks which instances rules actually use and
+     * publishes exactly those. Memoized per config generation like {@link #isEventReferenced}.
+     */
+    public static java.util.Set<EventData> referencedEventsOfType(String type) {
+        if (type == null || type.isEmpty() || enabledCount == 0) return java.util.Collections.emptySet();
+        int gen = configGeneration;
+        TypeScan cached = typeScanCache.get(type);
+        if (cached != null && cached.generation == gen) return cached.events;
+        java.util.Set<EventData> out = new java.util.HashSet<>();
+        for (Automation a : automations.values()) {
+            if (a.isDisabled()) continue;
+            for (EventData t : a.getTriggers()) addIfOfType(out, t, type);
+            for (AutomationCondition c : a.getAllConditions()) {
+                addIfOfType(out, c.getEventData(), type);
+                Object v = c.getValue();
+                if (v instanceof String) collectAddressesOfType(out, (String) v, type);
+            }
+            collectActionEventsOfType(a.getActions(), type, out, MAX_RUN_DEPTH, new java.util.HashSet<>());
+            collectActionEventsOfType(a.getElseActions(), type, out, MAX_RUN_DEPTH, new java.util.HashSet<>());
+        }
+        typeScanCache.put(type, new TypeScan(gen, out));
+        return out;
+    }
+
+    private static void addIfOfType(java.util.Set<EventData> out, EventData e, String type) {
+        if (e != null && type.equals(e.getType())) out.add(e);
+    }
+
+    /** Resolve {@code s} as a whole address and as any embedded ${signal:…} tokens; keep those of {@code type}. */
+    private static void collectAddressesOfType(java.util.Set<EventData> out, String s, String type) {
+        if (s == null || !s.contains(type)) return;
+        addIfOfType(out, AutomationCondition.resolveSignalAddress(s), type);
+        int from = s.indexOf(SIGNAL_TOKEN);
+        while (from >= 0) {
+            int end = s.indexOf('}', from);
+            if (end < 0) break;
+            addIfOfType(out, AutomationCondition.resolveSignalAddress(s.substring(from, end + 1)), type);
+            from = s.indexOf(SIGNAL_TOKEN, end + 1);
+        }
+    }
+
+    private static void collectActionEventsOfType(List<AutomationAction> actions, String type,
+            java.util.Set<EventData> out, int depthLeft, java.util.Set<String> visitedGroups) {
+        if (actions == null || actions.isEmpty() || depthLeft <= 0) return;
+        for (AutomationAction a : actions) {
+            if (a == null) continue;
+            Map<String, Object> vars = a.getVariables();
+            if (vars != null) {
+                for (Object v : vars.values()) {
+                    if (v instanceof String) collectAddressesOfType(out, (String) v, type);
+                }
+                if ("actionGroup".equals(a.getType())) {
+                    Object gidObj = vars.get("groupId");
+                    String gid = gidObj == null ? null : gidObj.toString().trim();
+                    if (gid != null && !gid.isEmpty() && visitedGroups.add(gid)) {
+                        collectActionEventsOfType(ActionGroups.getActions(gid), type, out, depthLeft - 1, visitedGroups);
+                        visitedGroups.remove(gid);
+                    }
+                }
+            }
+            collectActionEventsOfType(a.getChildActions(), type, out, depthLeft - 1, visitedGroups);
+            collectActionEventsOfType(a.getElseChildActions(), type, out, depthLeft - 1, visitedGroups);
+        }
+    }
+
     /**
      * The composite "either indicator" address (WaitUntilStateAction's sentinel). It is not a real
      * signal id, so it resolves to no key — the reference scan special-cases it to TURN_LEFT and

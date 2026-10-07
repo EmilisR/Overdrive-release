@@ -18,12 +18,22 @@ import org.json.JSONObject;
 public class AppType extends BaseType<String> {
     private static final String TYPE = "app";
     private final Label label;
+    private Label anyOption;
 
     /**
      * @param label An id and display name for this app selector
      */
     public AppType(Label label) {
         this.label = label;
+    }
+
+    /**
+     * Offer an extra first choice (stored as its id, e.g. "any") besides the installed apps.
+     * Used where "no specific app" is meaningful, such as the Media Playing signal.
+     */
+    public AppType withAnyOption(Label any) {
+        this.anyOption = any;
+        return this;
     }
 
     public Label getLabel() {
@@ -63,6 +73,7 @@ public class AppType extends BaseType<String> {
         JSONObject json = getLabel().toJson();
         try {
             json.put("type", TYPE);
+            if (anyOption != null) json.put("any", anyOption.toJson());
         } catch (Exception e) {
             // JSONObject.put only throws on null key
         }

@@ -3169,6 +3169,9 @@ BYD.automations = {
         const option = spec && spec.options && spec.options.find(o => o.id === rawVal);
         if (option && option.label != null) return this.optionLabel(option);
         if (spec && spec.type === 'time' && rawVal != null && !isNaN(rawVal)) return this.timeToString(rawVal);
+        if (spec && spec.type === 'app' && spec.any && rawVal === spec.any.id) {
+            return this._escVal(spec.any.label || rawVal);
+        }
         if (spec && spec.type === 'app' && rawVal != null) {
             // Prefer the friendly label if the app list is already cached; else the package name.
             const app = (this._appList || []).find(a => a.package === rawVal);
@@ -3224,9 +3227,22 @@ BYD.automations = {
         placeholder.hidden = true;
         selector.append(placeholder);
 
+        // Optional leading "no specific app" choice (e.g. Media Playing's "Any app"), stored as
+        // its id. It is the default, so the field is valid straight away and an untouched picker
+        // keeps meaning "any app" instead of leaving Save disabled.
+        const anyChoice = (data.any && data.any.id) ? data.any : null;
+        const fixedCount = anyChoice ? 2 : 1;
+        if (anyChoice) {
+            const anyOpt = document.createElement('option');
+            anyOpt.value = anyChoice.id;
+            anyOpt.textContent = anyChoice.label || anyChoice.id;
+            selector.append(anyOpt);
+            selector.value = defaultValue || anyChoice.id;
+        }
+
         const fill = (apps) => {
-            // Drop any previously-added app options (keep the placeholder at index 0).
-            while (selector.options.length > 1) selector.remove(1);
+            // Drop any previously-added app options (keep the placeholder, and "Any" if present).
+            while (selector.options.length > fixedCount) selector.remove(fixedCount);
             for (const app of apps) {
                 const opt = document.createElement('option');
                 opt.value = app.package;
@@ -3235,7 +3251,8 @@ BYD.automations = {
             }
             // If the stored package isn't in the list (uninstalled since), add it so
             // the binding still shows what it points at rather than silently blanking.
-            if (defaultValue && !apps.some(a => a.package === defaultValue)) {
+            if (defaultValue && !(anyChoice && defaultValue === anyChoice.id)
+                    && !apps.some(a => a.package === defaultValue)) {
                 const opt = document.createElement('option');
                 opt.value = defaultValue;
                 opt.textContent = defaultValue;

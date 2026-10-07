@@ -5,8 +5,17 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import com.overdrive.app.automation.condition.Conditions;
+import com.overdrive.app.automation.condition.EventData;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+import org.junit.After;
+import org.junit.BeforeClass;
 
 import org.junit.Test;
+
+import java.util.Map;
+import java.util.UUID;
 
 /** The {@code mediaPlaying} signal: registered, and derived from dumpsys media_session output. */
 public class MediaPlayingSignalTest {
@@ -17,6 +26,52 @@ public class MediaPlayingSignalTest {
           + "      package=com.google.android.apps.youtube.music\n"
           + "      active=true\n"
           + "      state=PlaybackState {state=2, position=0, buffered position=0, speed=1.0}\n";
+
+    private String automationId;
+
+    @BeforeClass
+    public static void muteAndroidLog() {
+        com.overdrive.app.logging.DaemonLogger.Config cfg =
+                new com.overdrive.app.logging.DaemonLogger.Config();
+        cfg.enableConsoleLog = false;
+        cfg.enableFileLog = false;
+        cfg.enableStdoutLog = true;
+        com.overdrive.app.logging.DaemonLogger.configure(cfg);
+    }
+
+    @After
+    public void cleanup() {
+        if (automationId != null) Automations.deleteAutomation(automationId);
+    }
+
+    @Test
+    public void rulesUsingSpecificAppsAreDiscoveredForThePoller() throws Exception {
+        automationId = UUID.randomUUID().toString();
+        JSONObject json = new JSONObject()
+                .put("triggers", new JSONArray()
+                        .put(new JSONObject().put("type", "mediaPlaying")
+                                .put("variables", new JSONObject().put("app", "com.spotify.music"))))
+                .put("conditions", new JSONArray())
+                .put("delay", 0)
+                .put("actions", new JSONArray()
+                        .put(new JSONObject().put("type", "setVariable")
+                                .put("variables", new JSONObject().put("name", "x").put("value", "${signal:mediaPlaying:app=app.rvx.android.apps.youtube.music}"))))
+                .put("name", "media app probe")
+                .put("disabled", false);
+        assertTrue(Automations.updateAutomation(automationId, json));
+        java.util.Set<EventData> found = Automations.referencedEventsOfType("mediaPlaying");
+        assertTrue(found.contains(new EventData("mediaPlaying", Map.of("app", "com.spotify.music"))));
+        assertTrue(found.contains(new EventData("mediaPlaying", Map.of("app", "app.rvx.android.apps.youtube.music"))));
+    }
+
+    @Test
+    public void triggerWithoutAppAttributeStillLoadsAsAnyApp() throws Exception {
+        // Saved before the app attribute existed (or with no app chosen): must not be dropped.
+        JSONObject trigger = new JSONObject().put("type", "mediaPlaying").put("variables", new JSONObject());
+        EventData e = new Conditions().getCondition("mediaPlaying").eventData(trigger);
+        assertNotNull(e);
+        assertTrue(e.getVariables().isEmpty());
+    }
 
     @Test
     public void conditionIsRegistered() {
@@ -44,16 +99,20 @@ public class MediaPlayingSignalTest {
     }
 
     @Test
-    public void appSelectionMatchesOnlyThatAppsPackage() throws Exception {
+    public void appSelectionMatchesOnlyThatPackage() throws Exception {
         String rvxPlaying = PAUSED.replace("com.google.android.apps.youtube.music", "app.rvx.android.apps.youtube.music")
                 .replace("state=2", "state=3");
         String spotifyPaused = "    x\n      package=com.spotify.music\n      active=true\n"
                 + "      state=PlaybackState {state=2, position=0}\n";
         String dump = rvxPlaying + spotifyPaused;
-        assertTrue(appPlaying(dump, "youtubeMusic"));   // RVX build matches
+        assertTrue(appPlaying(dump, "app.rvx.android.apps.youtube.music")); // the selected installed app
         assertTrue(appPlaying(dump, "any"));
-        assertFalse(appPlaying(dump, "spotify"));       // spotify is paused
-        assertFalse(appPlaying(spotifyPaused + PAUSED, "youtubeMusic"));
+        assertTrue(appPlaying(dump, null));                                 // bare/legacy signal = any app
+        assertFalse(appPlaying(dump, "com.spotify.music"));                 // paused
+        assertFalse(appPlaying(dump, "com.google.android.apps.youtube.music")); // different build, not playing
+        assertFalse(appPlaying(spotifyPaused + PAUSED, "app.rvx.android.apps.youtube.music"));
+        assertTrue(appPlaying(dump, "youtubeMusic"));                       // id from an earlier build
+        assertFalse(appPlaying(dump, "spotify"));
     }
 
     @SuppressWarnings("unchecked")
@@ -62,12 +121,9 @@ public class MediaPlayingSignalTest {
         java.lang.reflect.Method pp = c.getDeclaredMethod("playingPackages", String.class);
         pp.setAccessible(true);
         java.util.Set<String> playing = (java.util.Set<String>) pp.invoke(null, dump);
-        java.lang.reflect.Field f = c.getDeclaredField("APPS");
-        f.setAccessible(true);
-        String[] needles = ((java.util.Map<String, String[]>) f.get(null)).get(app);
-        java.lang.reflect.Method ap = c.getDeclaredMethod("appPlaying", java.util.Set.class, String[].class);
+        java.lang.reflect.Method ap = c.getDeclaredMethod("appPlaying", java.util.Set.class, String.class);
         ap.setAccessible(true);
-        return (Boolean) ap.invoke(null, playing, needles);
+        return (Boolean) ap.invoke(null, playing, app);
     }
 
     private static boolean isPlaying(String dump) throws Exception {
