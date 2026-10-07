@@ -412,8 +412,8 @@ android {
         debug {
             isMinifyEnabled = false
 
-            // Debug builds match the active braveheart channel
-            buildConfigField("String", "UPDATE_CHANNEL", "\"braveheart\"")
+            // This fork tracks the alpha release channel
+            buildConfigField("String", "UPDATE_CHANNEL", "\"alpha\"")
         }
         // Braveheart: the rolling/bleeding-edge channel, shipped as a RELEASE build but
         // with diagnostics ON so braveheart customers can upload complete per-daemon
